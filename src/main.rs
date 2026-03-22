@@ -29,12 +29,12 @@ struct AppData {
     index: u32,
     volume: i8,
 
-    refresh_screen: bool,
-    refresh_status_line: bool,
-    refresh_volume_bar: bool,
-    refresh_time_bar: bool,
-    last_time_bar_refresh: Instant,
-    refresh_queue: bool,
+    redraw_screen: bool,
+    redraw_status_line: bool,
+    redraw_volume_bar: bool,
+    redraw_time_bar: bool,
+    last_time_bar_redraw: Instant,
+    redraw_queue: bool,
     term_size: (u16, u16),
     queue_view_size: u16,
 }
@@ -48,8 +48,8 @@ impl AppData {
         let queue_version = status.queue_version;
         let volume = status.volume;
         let term_size = terminal::size()?;
-        let queue_view_size = term_size.1 - 17;
-        let index = status.song.map(|song| song.pos).unwrap_or(0).saturating_sub(queue_view_size as u32 / 2 - 2);
+        let queue_view_size = term_size.1.saturating_sub(17);
+        let index = status.song.map(|song| song.pos).unwrap_or(0).saturating_sub((queue_view_size as u32 / 2).saturating_sub(2));
         let elapsed_time = status.time.map(|t| t.0).unwrap_or(Duration::from_secs(0));
         Ok(Self {
             mpc,
@@ -63,12 +63,12 @@ impl AppData {
             index,
             volume,
 
-            refresh_screen: true,
-            refresh_status_line: false,
-            refresh_volume_bar: false,
-            refresh_time_bar: false,
-            last_time_bar_refresh: Instant::now(),
-            refresh_queue: false,
+            redraw_screen: true,
+            redraw_status_line: false,
+            redraw_volume_bar: false,
+            redraw_time_bar: false,
+            last_time_bar_redraw: Instant::now(),
+            redraw_queue: false,
             term_size,
             queue_view_size,
         })
@@ -77,18 +77,18 @@ impl AppData {
     fn fetch_mpd_state(&mut self) -> anyhow::Result<()> {
         self.status = self.mpc.status()?;
         self.last_status_update = Instant::now();
-        self.refresh_status_line = true;
+        self.redraw_status_line = true;
         self.last_elapsed_time = self.status.time.map(|t| t.0).unwrap_or(Duration::from_secs(0));
         self.last_elapsed_time_change = Instant::now();
         if self.volume != self.status.volume {
             self.volume = self.status.volume;
-            self.refresh_volume_bar = true;
+            self.redraw_volume_bar = true;
         }
 
         if self.status.queue_version != self.last_queue_version {
             self.queue = self.mpc.queue()?;
             self.last_queue_version = self.status.queue_version;
-            self.refresh_queue = true;
+            self.redraw_queue = true;
 
             let max = self.queue.len() as u32;
             self.index = if max == 0 { 0 } else { self.index.min(max - 1) };
@@ -131,7 +131,7 @@ impl AppData {
 
     fn set_volume(&mut self, volume: i8) -> anyhow::Result<()> {
         self.volume = volume.clamp(0, 100);
-        self.refresh_volume_bar = true;
+        self.redraw_volume_bar = true;
         self.mpc.volume(self.volume)?;
         Ok(())
     }
@@ -148,7 +148,7 @@ impl AppData {
         self.mpc.rewind(pos)?;
         self.last_elapsed_time = pos;
         self.last_elapsed_time_change = Instant::now();
-        self.refresh_time_bar = true;
+        self.redraw_time_bar = true;
         Ok(())
     }
 
@@ -198,13 +198,13 @@ impl AppData {
 
     fn scroll(&mut self, amount: i32) {
         self.index = ((self.index as i32 + amount).max(0) as u32).min(self.status.queue_len);
-        self.refresh_queue = true;
+        self.redraw_queue = true;
     }
 
     fn focus(&mut self, pos: u32) {
         let total = self.queue_view_size as u32;
         self.index = pos.saturating_sub(total / 2 - 2);
-        self.refresh_queue = true;
+        self.redraw_queue = true;
     }
 
     fn update(&mut self) -> anyhow::Result<()> {
@@ -219,9 +219,9 @@ impl AppData {
             let song_place = self.status.song;
             self.fetch_mpd_state()?;
             if song_place != self.status.song {
-                self.refresh_status_line = true;
-                self.refresh_time_bar = true;
-                self.refresh_queue = true;
+                self.redraw_status_line = true;
+                self.redraw_time_bar = true;
+                self.redraw_queue = true;
                 if let Some(place) = self.status.song {
                     if let Some(prev_place) = song_place {
                         self.scroll(place.pos as i32 - prev_place.pos as i32);
@@ -286,12 +286,6 @@ fn render_block(app: &mut PlayerApp, x0: u16, y0: u16, width: u16, height: u16) 
 
 fn draw_borders(app: &mut PlayerApp) -> anyhow::Result<()> {
     let (width, height) = app.data.term_size;
-    if width < 69 || height < 18 {
-        app.stdout
-            .queue(MoveTo(0, 0))?
-            .queue(Print("Terminal is too small!!"))?;
-        return Ok(());
-    }
     let color = Color::AnsiValue(92);
     let block_color = Color::AnsiValue(248);
     app.stdout
@@ -351,7 +345,7 @@ fn draw_borders(app: &mut PlayerApp) -> anyhow::Result<()> {
         .queue(Print(" 󰕲 Queue "))?;
     app.data.queue_view_size = height - 17;
 
-    app.data.refresh_screen = false;
+    app.data.redraw_screen = false;
     Ok(())
 }
 
@@ -389,7 +383,7 @@ fn draw_status_line(app: &mut PlayerApp) -> anyhow::Result<()> {
             .queue(SetAttribute(Attribute::Reset))?
             .queue(Print(" ".repeat(clear_count)))?;
     }
-    app.data.refresh_status_line = false;
+    app.data.redraw_status_line = false;
     Ok(())
 }
 
@@ -407,7 +401,7 @@ fn draw_volume_bar(app: &mut PlayerApp) -> anyhow::Result<()> {
         .queue(Print("-".repeat(unfilled)))?
         .queue(Print("]"))?;
 
-    app.data.refresh_volume_bar = false;
+    app.data.redraw_volume_bar = false;
     Ok(())
 }
 
@@ -447,8 +441,8 @@ fn draw_time_bar(app: &mut PlayerApp) -> anyhow::Result<()> {
         .queue(Print("-".repeat(unfilled)))?
         .queue(Print("]"))?;
 
-    app.data.last_time_bar_refresh = Instant::now();
-    app.data.refresh_time_bar = false;
+    app.data.last_time_bar_redraw = Instant::now();
+    app.data.redraw_time_bar = false;
     Ok(())
 }
 
@@ -497,13 +491,23 @@ fn draw_queue(app: &mut PlayerApp) -> anyhow::Result<()> {
             .queue(MoveTo(QUEUE_POS.0, QUEUE_POS.1 + line as u16))?
             .queue(Print(&clear_str))?;
     }
-    app.data.refresh_queue = false;
+    app.data.redraw_queue = false;
     Ok(())
 }
 
 fn render(app: &mut PlayerApp) -> anyhow::Result<()> {
+    let (width, height) = app.data.term_size;
+    if width < 69 || height < 18 {
+        app.stdout
+            .queue(Clear(ClearType::All))?
+            .queue(MoveTo(0, 0))?
+            .queue(Print("Terminal is too small!"))?
+            .flush()?;
+        return Ok(());
+    }
+
     let mut flush = false;
-    if app.data.refresh_screen {
+    if app.data.redraw_screen {
         draw_borders(app)?;
         draw_status_line(app)?;
         draw_volume_bar(app)?;
@@ -511,19 +515,19 @@ fn render(app: &mut PlayerApp) -> anyhow::Result<()> {
         draw_queue(app)?;
         flush = true;
     }
-    if app.data.refresh_status_line {
+    if app.data.redraw_status_line {
         draw_status_line(app)?;
         flush = true;
     }
-    if app.data.refresh_volume_bar {
+    if app.data.redraw_volume_bar {
         draw_volume_bar(app)?;
         flush = true;
     }
-    if app.data.refresh_time_bar || (app.data.status.state == State::Play && app.data.last_time_bar_refresh.elapsed() > Duration::from_millis(500)) {
+    if app.data.redraw_time_bar || (app.data.status.state == State::Play && app.data.last_time_bar_redraw.elapsed() > Duration::from_millis(500)) {
         draw_time_bar(app)?;
         flush = true;
     }
-    if app.data.refresh_queue {
+    if app.data.redraw_queue {
         draw_queue(app)?;
         flush = true;
     }
@@ -547,7 +551,7 @@ fn event_handler(app: &mut PlayerApp, event: Event) -> anyhow::Result<()> {
         Event::Key(key_event) if key_event.is_press() => handle_key_press(app, key_event)?,
         Event::Resize(w, h) => {
             app.data.term_size = (w, h);
-            app.data.refresh_screen = true;
+            app.data.redraw_screen = true;
         },
         _ => ()
     }
