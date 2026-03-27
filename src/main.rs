@@ -363,7 +363,7 @@ fn draw_status_line(app: &mut PlayerApp) -> anyhow::Result<()> {
     if let Some(song) = app.data.get_current_song() {
         let artist = song.artist.as_ref().map(|artist| artist.as_str()).unwrap_or("[Unknown]");
         let title = song.title.as_ref().map(|title| title.as_str()).unwrap_or(song.file.as_str());
-        let clear_count = (width as usize).saturating_sub(3 + artist.len() + title.len());
+        let clear_count = (width as usize).saturating_sub(3 + artist.chars().count() + title.chars().count());
         app.stdout
             .queue(SetAttribute(Attribute::Bold))?
             .queue(SetForegroundColor(Color::Yellow))?
@@ -458,7 +458,7 @@ fn draw_queue(app: &mut PlayerApp) -> anyhow::Result<()> {
         let artist = song.artist.as_ref().map(|artist| artist.as_str()).unwrap_or("[Unknown]");
         let title = song.title.as_ref().map(|title| title.as_str()).unwrap_or(song.file.as_str());
         let duration = song.duration.unwrap_or(Duration::from_secs(0));
-        let mut clear_count = (width as usize).saturating_sub(11 + artist.len() + title.len());
+        let mut clear_count = (width as usize).saturating_sub(11 + artist.chars().count() + title.chars().count());
         app.stdout
             .queue(MoveTo(QUEUE_POS.0, QUEUE_POS.1 + line as u16))?;
         if app.data.status.song == song.place {
