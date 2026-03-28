@@ -1,5 +1,5 @@
 use std::{io::{Stdout, stdout}, time::{Duration, Instant}, thread};
-use crossterm::{cursor, event::{self, Event, KeyCode, KeyModifiers}, execute};
+use crossterm::{cursor, event::{self, Event, KeyCode, KeyModifiers}, execute, terminal};
 
 const UPDATES_PER_SECOND: u64 = 10;
 const FRAME_DELAY: Duration = Duration::from_nanos(1_000_000_000u64 / UPDATES_PER_SECOND);
@@ -7,16 +7,19 @@ const FRAME_DELAY: Duration = Duration::from_nanos(1_000_000_000u64 / UPDATES_PE
 pub struct App<T> {
     should_exit: bool,
     pub data: T,
-    pub stdout: Stdout
+    pub stdout: Stdout,
+    pub term_size: (u16, u16)
 }
 
 impl<T> App<T> {
-    pub fn new(data: T) -> App<T> {
-        App::<T> {
+    pub fn new(data: T) -> anyhow::Result<App<T>> {
+        let term_size = terminal::size()?;
+        Ok(App::<T> {
             should_exit: false,
             data: data,
-            stdout: stdout()
-        }
+            stdout: stdout(),
+            term_size
+        })
     }
 
     pub fn exit(&mut self) {
@@ -26,10 +29,10 @@ impl<T> App<T> {
     fn poll_events(&mut self, event_handler: fn(&mut App<T>, Event) -> anyhow::Result<()>) -> anyhow::Result<()> {
         while event::poll(Duration::from_secs(0)).unwrap_or(false) {
             let event = event::read()?;
-                if let Event::Key(key) = event {
-                if key.is_press() && key.modifiers == KeyModifiers::CONTROL && (key.code == KeyCode::Char('c') || key.code == KeyCode::Char('q')) {
-                    self.exit();
-                }
+            match event {
+                Event::Key(key) if key.is_press() && key.modifiers == KeyModifiers::CONTROL && (key.code == KeyCode::Char('c') || key.code == KeyCode::Char('q')) => self.exit(),
+                Event::Resize(w, h) => self.term_size = (w, h),
+                _ => ()
             }
             event_handler(self, event)?;
         }
