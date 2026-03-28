@@ -253,6 +253,12 @@ fn handle_key_press(app: &mut PlayerApp, event: KeyEvent) -> anyhow::Result<()> 
         KeyCode::Down => app.data.scroll(1), 
         KeyCode::Left => app.data.move_pos(-10)?,
         KeyCode::Right => app.data.move_pos(10)?,
+        KeyCode::Char(c) if c.is_digit(10) => {
+            if let Some(duration) = app.data.status.duration {
+                let part = c.to_digit(10).unwrap();
+                app.data.set_pos(duration * part / 10)?;
+            }
+        },
         _ => ()
     }
     Ok(())
