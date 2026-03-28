@@ -118,8 +118,8 @@ fn draw_status_line(app: &mut PlayerApp) -> anyhow::Result<()> {
         .queue(STATUS_LINE_POS)?;
     let width = app.term_size.0 - 15;
     if let Some(song) = app.data.get_current_song() {
-        let artist = song.artist.as_ref().map(|artist| artist.as_str()).unwrap_or("[Unknown]");
-        let title = song.title.as_ref().map(|title| title.as_str()).unwrap_or(song.file.as_str());
+        let artist = song.artist.as_deref().unwrap_or("[Unknown]");
+        let title = song.title.as_deref().unwrap_or(song.file.as_str());
         let text_width = UnicodeWidthStr::width(artist) + 3 + UnicodeWidthStr::width(title);
         let clear_count = (width as usize).saturating_sub(text_width);
         app.stdout
@@ -212,9 +212,9 @@ fn draw_queue(app: &mut PlayerApp) -> anyhow::Result<()> {
     let width = app.term_size.0 - 15;
 
     let white = SetForegroundColor(Color::White);
-    for (line, song) in queue_slice.into_iter().enumerate() {
-        let artist = song.artist.as_ref().map(|artist| artist.as_str()).unwrap_or("[Unknown]");
-        let title = song.title.as_ref().map(|title| title.as_str()).unwrap_or(song.file.as_str());
+    for (line, song) in queue_slice.iter().enumerate() {
+        let artist = song.artist.as_deref().unwrap_or("[Unknown]");
+        let title = song.title.as_deref().unwrap_or(song.file.as_str());
         let duration = song.duration.unwrap_or(Duration::from_secs(0));
         let text_width = UnicodeWidthStr::width(artist) + UnicodeWidthStr::width(title) + 11;
         let mut clear_count = (width as usize).saturating_sub(text_width);

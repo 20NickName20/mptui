@@ -16,7 +16,7 @@ impl<T> App<T> {
         let term_size = terminal::size()?;
         Ok(App::<T> {
             should_exit: false,
-            data: data,
+            data,
             stdout: stdout(),
             term_size
         })
